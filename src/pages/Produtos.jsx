@@ -63,7 +63,7 @@ const Produtos = () => {
     setLoading(true);
     try {
       const [produtosRes, categoriasRes] = await Promise.all([
-        // ALTERAÇÃO: Usar a constante PRODUTOS_POR_PAGINA para o limite
+        // ALTERAÇÃO CRÍTICA: Usar 'limit' em vez de 'limite'
         produtosService.listar({ pagina: 1, limit: PRODUTOS_POR_PAGINA }),
         categoriasService.listar(),
       ])
@@ -87,8 +87,8 @@ const Produtos = () => {
     try {
       const response = await produtosService.listar({
         pagina,
-        // ALTERAÇÃO: Usar a constante PRODUTOS_POR_PAGINA para o limite
-        limite: PRODUTOS_POR_PAGINA,
+        // ALTERAÇÃO CRÍTICA: Usar 'limit' em vez de 'limite'
+        limit: PRODUTOS_POR_PAGINA,
         busca: busca || undefined,
         categoria: categoria || undefined,
       })
@@ -540,7 +540,7 @@ const Produtos = () => {
     }
   }
 
-  // ALTERAÇÃO: Calcular totalPages com base na nova constante
+  // Calcular totalPages com base na nova constante
   const totalPages = Math.ceil(total / PRODUTOS_POR_PAGINA);
 
   const carregarProduto = async (id) => {
