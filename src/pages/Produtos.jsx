@@ -10,6 +10,9 @@ import { MagnifyingGlassIcon, PlusIcon, Pencil1Icon, TrashIcon, Cross2Icon, Star
 import FileDropZone from "../components/FileDropZone"
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd"
 
+// NOVO: Definindo a constante para o limite de produtos por página
+const PRODUTOS_POR_PAGINA = 500; // O limite desejado de 500 produtos
+
 const Produtos = () => {
   const [produtos, setProdutos] = useState([])
   const [categorias, setCategorias] = useState([])
@@ -60,7 +63,8 @@ const Produtos = () => {
     setLoading(true);
     try {
       const [produtosRes, categoriasRes] = await Promise.all([
-        produtosService.listar({ pagina: 1, limite: 10 }),
+        // ALTERAÇÃO: Usar a constante PRODUTOS_POR_PAGINA para o limite
+        produtosService.listar({ pagina: 1, limit: PRODUTOS_POR_PAGINA }),
         categoriasService.listar(),
       ])
       // A resposta da API de produtos pode ter um formato diferente
@@ -83,7 +87,8 @@ const Produtos = () => {
     try {
       const response = await produtosService.listar({
         pagina,
-        limite: 10,
+        // ALTERAÇÃO: Usar a constante PRODUTOS_POR_PAGINA para o limite
+        limite: PRODUTOS_POR_PAGINA,
         busca: busca || undefined,
         categoria: categoria || undefined,
       })
@@ -535,7 +540,8 @@ const Produtos = () => {
     }
   }
 
-  const totalPages = Math.ceil(total / 10);
+  // ALTERAÇÃO: Calcular totalPages com base na nova constante
+  const totalPages = Math.ceil(total / PRODUTOS_POR_PAGINA);
 
   const carregarProduto = async (id) => {
     try {
