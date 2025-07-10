@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { produtosService, categoriasService, variacoesService, uploadService } from "../services/api" // Importar uploadService
+import { produtosService, categoriasService, variacoesService } from "../services/api"
 import { useToast } from "../contexts/ToastContext"
 import LoadingSpinner from "../components/LoadingSpinner"
 import * as Dialog from "@radix-ui/react-dialog"
