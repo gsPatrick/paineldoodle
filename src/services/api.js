@@ -69,14 +69,16 @@ export const categoriasService = {
 
 export const variacoesService = {
   criarEmLote: (produtoId, variacoes) => api.post(`/produtos/${produtoId}/variacoes/lote`, variacoes),
-  // CORREÇÃO CRÍTICA: A rota para excluir uma variação é pelo ID dela, não precisa do ID do produto.
-  excluir: (variacaoId) => api.delete(`/variacoes/${variacaoId}`),
+  // CORREÇÃO CRÍTICA: A rota para excluir uma variação é aninhada e precisa dos dois IDs.
+  // A rota no backend é /produtos/:produtoId/variacoes/:id
+  excluir: (produtoId, variacaoId) => api.delete(`/produtos/${produtoId}/variacoes/${variacaoId}`),
 };
 
-// NOVO SERVIÇO PARA UPLOADS (separado do produtosService)
+// SERVIÇO PARA UPLOADS (separado do produtosService)
 export const uploadService = {
   uploadProdutoImagens: (produtoId, formData) => api.post(`/uploads/produtos/${produtoId}/imagens`, formData, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 300000 }),
   uploadProdutoArquivo: (produtoId, formData) => api.post(`/uploads/produtos/${produtoId}/arquivo`, formData, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 300000 }),
+  // CORREÇÃO: O backend espera o campo 'file' para o upload de vídeo
   uploadProdutoVideo: (produtoId, formData) => api.post(`/uploads/produtos/${produtoId}/video`, formData, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 600000 }),
   excluirArquivo: (arquivoId) => api.delete(`/uploads/arquivos/${arquivoId}`),
   definirImagemPrincipal: (produtoId, arquivoId) => api.put(`/uploads/produtos/${produtoId}/imagens/${arquivoId}/principal`),
@@ -108,7 +110,7 @@ export const cuponsService = {
   validar: (codigo) => api.post("/cupons/validar", { codigo }),
 };
 
-// SERVIÇO DE RELATÓRIOS QUE ESTAVA FALTANDO
+// SERVIÇO DE RELATÓRIOS
 export const relatoriosService = {
   vendas: (params) => api.get("/relatorios/vendas", { params }),
   produtosMaisVendidos: (params) => api.get("/relatorios/produtos-mais-vendidos", { params }),
@@ -150,9 +152,10 @@ export const blogService = {
 };
 
 export const configuracoesService = {
-  obter: () => api.get("/configuracoes/loja"),
-  atualizar: (dados) => api.put("/configuracoes/loja", dados),
-  obterEspecifica: (chave) => api.get(`/configuracoes/loja/${chave}`),
-  definirEspecifica: (chave, valor) => api.put(`/configuracoes/loja/${chave}`, { valor }),
-  inicializar: () => api.post("/configuracoes/loja/inicializar"),
+  // PADRONIZAÇÃO: A rota deve corresponder ao nome do arquivo de rotas do backend (configuracaoLojaRoutes.js)
+  obter: () => api.get("/configuracao-loja"),
+  atualizar: (dados) => api.put("/configuracao-loja", dados),
+  obterEspecifica: (chave) => api.get(`/configuracao-loja/${chave}`),
+  definirEspecifica: (chave, valor) => api.put(`/configuracao-loja/${chave}`, { valor }),
+  inicializar: () => api.post("/configuracao-loja/inicializar"),
 };

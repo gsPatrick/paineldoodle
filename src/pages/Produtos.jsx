@@ -40,6 +40,7 @@ const Produtos = () => {
 
   const [salvando, setSalvando] = useState(false)
   const [variacoes, setVariacoes] = useState([])
+  const [variacoesOriginais, setVariacoesOriginais] = useState([]) // Para gerenciar atualizações
 
   useEffect(() => {
     carregarDadosIniciais()
@@ -117,6 +118,7 @@ const Produtos = () => {
         videosParaEnviar: []
       });
       setVariacoes([]);
+      setVariacoesOriginais([]);
     }
     setModalAberto(true);
   }
@@ -144,14 +146,16 @@ const Produtos = () => {
       });
 
       const variacoesData = Array.isArray(produtoCompleto.variacoes) ? produtoCompleto.variacoes : [];
-      setVariacoes(variacoesData.map(v => ({
+      const variacoesFormatadas = variacoesData.map(v => ({
         id: v.id,
         nome: v.nome || "",
-        preco: v.preco != null ? String(v.preco) : "0",
+        preco: v.preco != null ? String(v.preco).replace('.', ',') : "0,00",
         digital: !!v.digital,
         estoque: v.estoque != null ? String(v.estoque) : "0",
         ativo: v.ativo !== false
-      })));
+      }));
+      setVariacoes(variacoesFormatadas);
+      setVariacoesOriginais(variacoesFormatadas); // Salva o estado original
 
     } catch (err) {
       error("Erro ao carregar detalhes do produto.");
@@ -186,24 +190,26 @@ const Produtos = () => {
   
     try {
       let produtoId;
+  
       if (produtoEditando) {
+        // Atualiza o produto base
         await produtosService.atualizar(produtoEditando.id, dadosProduto);
         produtoId = produtoEditando.id;
+        
+        // Lógica de Atualização de Variações: Deleta as antigas e cria as novas
+        // Isso é uma estratégia "replace". Uma estratégia mais avançada faria um diff.
+        if (variacoesOriginais.length > 0) {
+            await Promise.all(
+                variacoesOriginais.map(v => variacoesService.excluir(v.id))
+            );
+        }
       } else {
+        // Cria o novo produto
         const resposta = await produtosService.criar(dadosProduto);
         produtoId = resposta.data.id;
       }
       
-      // CORREÇÃO AQUI: Apenas tenta excluir variações que JÁ TINHAM ID.
-      if (produtoEditando?.variacoes?.length > 0) {
-        const variacoesParaExcluir = produtoEditando.variacoes.filter(v => v.id);
-        if (variacoesParaExcluir.length > 0) {
-          await Promise.all(
-            variacoesParaExcluir.map(v => variacoesService.excluir(v.id))
-          );
-        }
-      }
-
+      // Cria as novas variações (seja para um produto novo ou um atualizado)
       if (variacoes.length > 0) {
         const variacoesParaEnviar = variacoes.map(v => ({
           ...v,
@@ -213,23 +219,25 @@ const Produtos = () => {
         await variacoesService.criarEmLote(produtoId, variacoesParaEnviar);
       }
       
+      // Upload de Imagens
       if (formData.imagensParaEnviar.length > 0) {
         const formDataImagens = new FormData();
-        // CORREÇÃO AQUI: Usar 'imagens' como nome do campo
-        formData.imagensParaEnviar.forEach(file => formDataImagens.append('imagens', file)); 
+        // CORREÇÃO: O nome do campo deve ser 'files' para corresponder ao backend
+        formData.imagensParaEnviar.forEach(file => formDataImagens.append('files', file)); 
         await uploadService.uploadProdutoImagens(produtoId, formDataImagens);
       }
   
+      // Upload de Arquivos Digitais
       for (const file of formData.arquivosParaEnviar) {
         const formDataArquivo = new FormData();
-        formDataArquivo.append('arquivo', file);
+        formDataArquivo.append('file', file); // O backend espera 'file' para arquivos
         await uploadService.uploadProdutoArquivo(produtoId, formDataArquivo);
       }
   
+      // Upload de Vídeos
       for (const file of formData.videosParaEnviar) {
         const formDataVideo = new FormData();
-        // O backend espera o campo 'video' para o upload de vídeo
-        formDataVideo.append('video', file);
+        formDataVideo.append('file', file); // O backend espera 'file' para vídeos
         await uploadService.uploadProdutoVideo(produtoId, formDataVideo);
       }
   
@@ -310,9 +318,14 @@ const Produtos = () => {
     }
   };
 
-  const adicionarVariacao = () => setVariacoes(prev => [...(Array.isArray(prev) ? prev : []), { nome: "", preco: "0.00", estoque: "0", digital: false, ativo: true }]);
+  const adicionarVariacao = () => setVariacoes(prev => [...(Array.isArray(prev) ? prev : []), { nome: "", preco: "0,00", estoque: "0", digital: false, ativo: true }]);
   const removerVariacao = (index) => setVariacoes(prev => prev.filter((_, i) => i !== index));
-  const handleVariacaoChange = (index, campo, valor) => setVariacoes(prev => prev.map((v, i) => (i === index ? { ...v, [campo]: valor } : v)));
+  const handleVariacaoChange = (index, campo, valor) => {
+    const novoValor = (campo === 'preco' || campo === 'estoque') && typeof valor === 'boolean' 
+        ? String(valor)
+        : valor;
+    setVariacoes(prev => prev.map((v, i) => (i === index ? { ...v, [campo]: novoValor } : v)))
+  };
   
   const totalPages = Math.ceil(total / PRODUTOS_POR_PAGINA);
   
@@ -352,7 +365,8 @@ const Produtos = () => {
                 {produtos.map((produto) => (
                   <tr key={produto.id} className="border-b hover:bg-gray-50">
                     <td className="p-3 flex items-center gap-4">
-                      <img src={produto.imagens?.[0] || "https://via.placeholder.com/150"} alt={produto.nome} className="w-12 h-12 rounded-md object-cover"/>
+                      {/* CORREÇÃO: URL do placeholder ajustada */}
+                      <img src={produto.imagens?.[0] || "https://placehold.co/150x150.png"} alt={produto.nome} className="w-12 h-12 rounded-md object-cover"/>
                       <span className="font-medium">{produto.nome}</span>
                     </td>
                     <td className="p-3">
@@ -383,7 +397,8 @@ const Produtos = () => {
             {produtos.map((produto) => (
               <div key={produto.id} className="bg-white p-4 rounded-lg shadow">
                  <div className="flex items-start gap-4">
-                    <img src={produto.imagens?.[0] || "https://via.placeholder.com/150"} alt={produto.nome} className="w-16 h-16 rounded-md object-cover" />
+                    {/* CORREÇÃO: URL do placeholder ajustada */}
+                    <img src={produto.imagens?.[0] || "https://placehold.co/150x150.png"} alt={produto.nome} className="w-16 h-16 rounded-md object-cover" />
                     <div className="flex-1">
                         <h3 className="font-bold text-lg">{produto.nome}</h3>
                         <span className={`px-2 py-1 rounded-full text-xs font-semibold ${produto.ativo ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>{produto.ativo ? "Ativo" : "Inativo"}</span>
@@ -478,7 +493,7 @@ const Produtos = () => {
                 {variacoes.map((v, i) => (
                   <div key={i} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center p-2 border rounded-md">
                     <div className="md:col-span-4"><input placeholder="Nome" value={v.nome} onChange={e => handleVariacaoChange(i, 'nome', e.target.value)} className="w-full p-2 border rounded"/></div>
-                    <div className="md:col-span-3"><input placeholder="Preço (ex: 10.50)" value={v.preco} onChange={e => handleVariacaoChange(i, 'preco', e.target.value)} className="w-full p-2 border rounded"/></div>
+                    <div className="md:col-span-3"><input placeholder="Preço (ex: 10,50)" value={v.preco} onChange={e => handleVariacaoChange(i, 'preco', e.target.value)} className="w-full p-2 border rounded"/></div>
                     <div className="md:col-span-2"><input type="number" placeholder="Estoque" value={v.estoque} onChange={e => handleVariacaoChange(i, 'estoque', e.target.value)} className="w-full p-2 border rounded"/></div>
                     <div className="md:col-span-1 flex items-center justify-center"><input type="checkbox" checked={v.digital} onChange={e => handleVariacaoChange(i, 'digital', e.target.checked)} className="h-4 w-4"/><label className="ml-1 text-xs">Digital</label></div>
                     <div className="md:col-span-1 flex items-center justify-center"><input type="checkbox" checked={v.ativo} onChange={e => handleVariacaoChange(i, 'ativo', e.target.checked)} className="h-4 w-4"/><label className="ml-1 text-xs">Ativo</label></div>
