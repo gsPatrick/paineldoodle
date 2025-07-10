@@ -1,3 +1,5 @@
+// src/components/Admin/Produtos.jsx
+
 "use client"
 
 import { useState, useEffect } from "react"
@@ -31,16 +33,16 @@ const Produtos = () => {
     descricao: "",
     categoriaId: "",
     ativo: true,
-    ArquivoProdutos: [],
-    imagensExistentes: [],
-    arquivosExistentes: [],
-    videosExistentes: [],
+    // ArquivoProdutos agora será o 'single source of truth' para todos os arquivos
+    ArquivoProdutos: [], // Este conterá todos os arquivos (imagens, vídeos, arquivos)
     imagensParaEnviar: [],
     arquivosParaEnviar: [],
     videosParaEnviar: []
+    // Removido imagensExistentes, arquivosExistentes, videosExistentes, imagensParaRemover, etc.
+    // Tudo será filtrado de ArquivoProdutos e manipulado diretamente via API.
   })
 
-  const [precoFormatado, setPrecoFormatado] = useState("")
+  // const [precoFormatado, setPrecoFormatado] = useState("") // Removido, pois variações têm seu próprio preço
   const [salvando, setSalvando] = useState(false)
   const [variacoes, setVariacoes] = useState([])
 
@@ -122,58 +124,14 @@ const Produtos = () => {
         const resposta = await produtosService.obter(produto.id);
         const produtoCompleto = resposta.data;
 
-        // Preparar imagens existentes
-        const imagensExistentes = Array.isArray(produtoCompleto.ArquivoProdutos) 
-          ? produtoCompleto.ArquivoProdutos
-            .filter(arquivo => arquivo && arquivo.tipo === 'imagem')
-            .map(arquivo => ({
-              id: arquivo.id,
-              url: arquivo.url,
-              nome: arquivo.nome,
-              principal: arquivo.principal,
-              ordem: arquivo.ordem || 0
-            }))
-          : [];
-
-        // Ordenar imagens pela propriedade ordem
-        imagensExistentes.sort((a, b) => a.ordem - b.ordem);
-
-        // Preparar arquivos existentes
-        const arquivosExistentes = Array.isArray(produtoCompleto.ArquivoProdutos)
-          ? produtoCompleto.ArquivoProdutos
-            .filter(arquivo => arquivo && arquivo.tipo === 'arquivo')
-            .map(arquivo => ({
-              id: arquivo.id,
-              url: arquivo.url,
-              nome: arquivo.nome,
-              tamanho: arquivo.tamanho,
-              mimeType: arquivo.mimeType
-            }))
-          : [];
-
-        // Preparar vídeos existentes
-        const videosExistentes = Array.isArray(produtoCompleto.ArquivoProdutos)
-          ? produtoCompleto.ArquivoProdutos
-            .filter(arquivo => arquivo && arquivo.tipo === 'video')
-            .map(arquivo => ({
-              id: arquivo.id,
-              url: arquivo.url,
-              nome: arquivo.nome,
-              tamanho: arquivo.tamanho,
-              mimeType: arquivo.mimeType
-            }))
-          : [];
-
         setProdutoEditando(produtoCompleto);
         setFormData({
           nome: produtoCompleto.nome || "",
           descricao: produtoCompleto.descricao || "",
           categoriaId: produtoCompleto.categoriaId || "",
           ativo: produtoCompleto.ativo !== undefined ? produtoCompleto.ativo : true,
-          ArquivoProdutos: produtoCompleto.ArquivoProdutos || [],
-          imagensExistentes,
-          arquivosExistentes,
-          videosExistentes,
+          // Agora, todos os arquivos (imagens, vídeos, arquivos) vêm em ArquivoProdutos
+          ArquivoProdutos: Array.isArray(produtoCompleto.ArquivoProdutos) ? produtoCompleto.ArquivoProdutos : [],
           imagensParaEnviar: [],
           arquivosParaEnviar: [],
           videosParaEnviar: []
@@ -192,6 +150,14 @@ const Produtos = () => {
       } catch (err) {
         error("Erro ao carregar detalhes do produto para edição.");
         setVariacoes([]); // Garantir que variacoes seja um array vazio em caso de erro
+        // Limpar formData de arquivos existentes em caso de erro de carregamento
+        setFormData(prev => ({
+          ...prev,
+          ArquivoProdutos: [],
+          imagensParaEnviar: [],
+          arquivosParaEnviar: [],
+          videosParaEnviar: []
+        }));
         return;
       } finally {
         setLoading(false);
@@ -204,9 +170,6 @@ const Produtos = () => {
         categoriaId: "",
         ativo: true,
         ArquivoProdutos: [],
-        imagensExistentes: [],
-        arquivosExistentes: [],
-        videosExistentes: [],
         imagensParaEnviar: [],
         arquivosParaEnviar: [],
         videosParaEnviar: []
@@ -242,15 +205,7 @@ const Produtos = () => {
     });
   }
 
-  const handlePrecoChange = (e) => {
-    const valor = e.target.value;
-    const numerico = valor.replace(/\D/g, '');
-    setFormData(prev => ({
-      ...prev,
-      preco: numerico ? (parseFloat(numerico) / 100).toString() : ''
-    }));
-    setPrecoFormatado(numerico ? formatarPreco(numerico) : '');
-  }
+  // Removido handlePrecoChange pois o preço agora é tratado por variação
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -267,21 +222,22 @@ const Produtos = () => {
       let produtoId;
       let message;
 
-      // Primeiro, criar ou atualizar o produto
+      // 1. Primeiro, criar ou atualizar o produto principal
       if (produtoEditando) {
-        const respostaAtualizacao = await produtosService.atualizar(produtoEditando.id, dadosProduto)
+        await produtosService.atualizar(produtoEditando.id, dadosProduto)
         produtoId = produtoEditando.id;
         message = "Produto atualizado com sucesso!";
         
-        // Se estamos editando, primeiro excluímos as variações existentes
-        // e depois criamos as novas para evitar duplicação
-        if (produtoEditando.variacoes && produtoEditando.variacoes.length > 0) {
-          // Excluir variações existentes uma por uma
+        // 2. Se estamos editando, primeiro excluímos as variações existentes
+        if (Array.isArray(produtoEditando.variacoes) && produtoEditando.variacoes.length > 0) {
           for (const variacao of produtoEditando.variacoes) {
             try {
-              await variacoesService.excluir(produtoId, variacao.id);
+              if (variacao.id) { // Só tenta excluir se a variação tem um ID (já existia no DB)
+                await variacoesService.excluir(produtoId, variacao.id);
+              }
             } catch (err) {
               console.error(`Erro ao excluir variação ${variacao.id}:`, err);
+              // Não impede o resto do processo
             }
           }
         }
@@ -291,43 +247,33 @@ const Produtos = () => {
         message = "Produto criado com sucesso!";
       }
 
-      // Criar variações em lote
-      if (variacoes && variacoes.length > 0) {
+      // 3. Criar variações em lote (agora todas são novas ou recriadas)
+      if (Array.isArray(variacoes) && variacoes.length > 0) {
         try {
           const variacoesParaEnviar = variacoes.map(variacao => {
-            // Garantir que o preço seja um número válido
             let preco = 0;
             if (variacao.preco) {
-              // Remover formatação de moeda (R$, pontos, vírgulas)
               let precoLimpo = String(variacao.preco).replace(/[^\d,.-]/g, '');
-              
-              // Substituir vírgula por ponto para o parseFloat funcionar corretamente
-              precoLimpo = precoLimpo.replace(',', '.');
-              
-              // Garantir que temos apenas um ponto decimal
-              const partes = precoLimpo.split('.');
-              if (partes.length > 2) {
-                // Se tiver mais de um ponto, junta tudo antes do último ponto
-                // e mantém o último como decimal
-                const inteira = partes.slice(0, -1).join('');
-                const decimal = partes[partes.length - 1];
-                precoLimpo = `${inteira}.${decimal}`;
+              const partes = precoLimpo.split(/[,.]/); // Divide por vírgula ou ponto
+              if (partes.length > 2) { // Ex: 1.000,00 -> partes = ['1','000','00']
+                  // Pega tudo antes da última parte e junta, depois adiciona a última parte como decimal
+                  const inteira = partes.slice(0, -1).join('');
+                  const decimal = partes[partes.length - 1];
+                  precoLimpo = `${inteira}.${decimal}`;
+              } else if (partes.length === 2 && valorLimpo.includes(',')) { // Ex: 10,00
+                  precoLimpo = precoLimpo.replace(',', '.');
               }
-              
               preco = parseFloat(precoLimpo);
-              
-              // Se ainda for NaN, define como 0
               if (isNaN(preco)) {
                 preco = 0;
               }
             }
-            
             return {
               nome: variacao.nome || "Variação",
               preco: preco,
-              digital: variacao.digital || false,
+              digital: Boolean(variacao.digital),
               estoque: parseInt(variacao.estoque) || 0,
-              ativo: variacao.ativo !== false
+              ativo: Boolean(variacao.ativo)
             };
           });
           
@@ -335,54 +281,54 @@ const Produtos = () => {
         } catch (err) {
           console.error("Erro ao criar variações:", err);
           error("Erro ao criar variações do produto");
-          return;
+          // Continua o processo mesmo com erro de variação, se necessário
         }
       }
 
-      // Upload de imagens
-      if (formData.imagensParaEnviar && formData.imagensParaEnviar.length > 0) {
+      // 4. Upload de imagens (corrigido o campo 'files')
+      if (Array.isArray(formData.imagensParaEnviar) && formData.imagensParaEnviar.length > 0) {
         try {
           const formDataImagem = new FormData();
           formData.imagensParaEnviar.forEach(imagem => {
-            formDataImagem.append("imagens", imagem);
+            formDataImagem.append("files", imagem); // <-- CORRIGIDO AQUI: 'files'
           });
           await produtosService.uploadImagens(produtoId, formDataImagem);
         } catch (err) {
           console.error("Erro ao fazer upload das imagens:", err);
           error("Erro ao fazer upload das imagens");
-          return;
+          // Não impede o resto do processo
         }
       }
 
-      // Upload de arquivos digitais
-      if (formData.arquivosParaEnviar && formData.arquivosParaEnviar.length > 0) {
+      // 5. Upload de arquivos digitais (corrigido o campo 'file')
+      if (Array.isArray(formData.arquivosParaEnviar) && formData.arquivosParaEnviar.length > 0) {
         try {
           const formDataArquivo = new FormData();
-          formDataArquivo.append("arquivo", formData.arquivosParaEnviar[0]);
+          formDataArquivo.append("file", formData.arquivosParaEnviar[0]); // <-- CORRIGIDO AQUI: 'file'
           await produtosService.uploadArquivo(produtoId, formDataArquivo);
         } catch (err) {
           console.error("Erro ao fazer upload dos arquivos:", err);
           error("Erro ao fazer upload dos arquivos digitais");
-          return;
+          // Não impede o resto do processo
         }
       }
 
-      // Upload de vídeos
-      if (formData.videosParaEnviar && formData.videosParaEnviar.length > 0) {
+      // 6. Upload de vídeos (corrigido o campo 'file')
+      if (Array.isArray(formData.videosParaEnviar) && formData.videosParaEnviar.length > 0) {
         try {
           const formDataVideo = new FormData();
-          formDataVideo.append("video", formData.videosParaEnviar[0]);
+          formDataVideo.append("file", formData.videosParaEnviar[0]); // <-- CORRIGIDO AQUI: 'file'
           await produtosService.uploadVideo(produtoId, formDataVideo);
         } catch (err) {
           console.error("Erro ao fazer upload do vídeo:", err);
           error("Erro ao fazer upload do vídeo");
-          return;
+          // Não impede o resto do processo
         }
       }
 
       success(message);
       fecharModal();
-      carregarProdutos();
+      carregarProdutos(); // Recarrega a lista de produtos após salvar
     } catch (err) {
       console.error("Erro ao salvar produto:", err);
       error(err.response?.data?.erro || "Erro ao salvar produto");
@@ -416,21 +362,21 @@ const Produtos = () => {
   const onImageDrop = (acceptedFiles) => {
     setFormData(prev => ({
       ...prev,
-      imagensParaEnviar: [...(prev.imagensParaEnviar || []), ...acceptedFiles]
+      imagensParaEnviar: [...(Array.isArray(prev.imagensParaEnviar) ? prev.imagensParaEnviar : []), ...acceptedFiles]
     }))
   }
 
   const onFileDrop = (acceptedFiles) => {
     setFormData(prev => ({
       ...prev,
-      arquivosParaEnviar: [...(prev.arquivosParaEnviar || []), ...acceptedFiles]
+      arquivosParaEnviar: [...(Array.isArray(prev.arquivosParaEnviar) ? prev.arquivosParaEnviar : []), ...acceptedFiles]
     }))
   }
 
   const onVideoDrop = (acceptedFiles) => {
     setFormData(prev => ({
       ...prev,
-      videosParaEnviar: [...(prev.videosParaEnviar || []), ...acceptedFiles]
+      videosParaEnviar: [...(Array.isArray(prev.videosParaEnviar) ? prev.videosParaEnviar : []), ...acceptedFiles]
     }))
   }
 
@@ -452,48 +398,58 @@ const Produtos = () => {
       }));
   }
   
-  const removerArquivoExistente = async (arquivoId) => {
-      if(!produtoEditando) return;
+  const removerVideoParaEnviar = (index) => { // Novo: Remover video do array de "para enviar"
+    setFormData(prev => ({
+        ...prev,
+        videosParaEnviar: Array.isArray(prev.videosParaEnviar)
+          ? prev.videosParaEnviar.filter((_, i) => i !== index)
+          : []
+    }));
+  }
+
+  // NOVO: Função para remover arquivo EXISTENTE (via API)
+  const removerArquivoExistente = async (arquivoObj) => {
+      if(!produtoEditando || !arquivoObj.id) return;
       try {
-          await produtosService.removerArquivo(produtoEditando.id, arquivoId);
+          await produtosService.removerArquivo(produtoEditando.id, arquivoObj.id);
+          success("Arquivo removido com sucesso!");
+          // Atualiza o estado local para remover o arquivo da lista
           setFormData(prev => ({
               ...prev,
               ArquivoProdutos: Array.isArray(prev.ArquivoProdutos)
-                ? prev.ArquivoProdutos.filter(f => f.id !== arquivoId)
+                ? prev.ArquivoProdutos.filter(f => f.id !== arquivoObj.id)
                 : []
           }));
-          success("Arquivo removido com sucesso!");
       } catch(err) {
-          console.error("Erro ao remover arquivo:", err);
-          error("Erro ao remover arquivo.");
+          console.error("Erro ao remover arquivo existente:", err);
+          error(err.response?.data?.erro || "Erro ao remover arquivo existente.");
       }
   }
 
-  const definirPrincipal = async (arquivoId) => {
-    if(!produtoEditando) return;
+  // NOVO: Função para definir imagem principal (via API)
+  const definirPrincipal = async (imagemObj) => {
+    if(!produtoEditando || !imagemObj.id) return;
     try {
-        await produtosService.definirImagemPrincipal(produtoEditando.id, arquivoId);
+        await produtosService.definirImagemPrincipal(produtoEditando.id, imagemObj.id);
+        success("Imagem principal definida com sucesso!");
         // Atualiza o estado local para refletir a mudança
         setFormData(prev => ({
             ...prev,
             ArquivoProdutos: Array.isArray(prev.ArquivoProdutos)
               ? prev.ArquivoProdutos.map(f => ({
                   ...f,
-                  principal: f.id === arquivoId
+                  principal: (f.id === imagemObj.id) && (f.tipo === 'imagem') // Apenas a imagem principal, se for imagem
                 }))
               : []
         }));
-        success("Imagem principal definida com sucesso!");
-        await carregarProdutos(); // Recarrega para garantir consistência
     } catch(err) {
         console.error("Erro ao definir imagem principal:", err);
-        error("Erro ao definir imagem principal.");
+        error(err.response?.data?.erro || "Erro ao definir imagem principal.");
     }
   }
 
   const adicionarVariacao = () => {
     setVariacoes(prev => {
-      // Garantir que prev é um array
       const variacoesAtuais = Array.isArray(prev) ? prev : [];
       return [
         ...variacoesAtuais,
@@ -508,33 +464,30 @@ const Produtos = () => {
 
   const handleVariacaoChange = (index, campo, valor) => {
     if (campo === "preco") {
-      // Formatar o valor do preço para exibição
-      // Permitir entrada de valores com vírgula ou ponto
-      // Remover caracteres não numéricos, exceto vírgula e ponto
-      let valorFormatado = String(valor || '').replace(/[^\d,.-]/g, '');
+      let valorFormatado = String(valor || '').replace(/[^\d,.]/g, ''); // Permite ponto também para entrada direta
       
-      // Garantir que só existe um separador decimal (vírgula ou ponto)
-      const temVirgula = valorFormatado.includes(',');
-      const temPonto = valorFormatado.includes('.');
-      
-      if (temVirgula && temPonto) {
-        // Se tem ambos, mantém apenas o último
-        const ultimoSeparador = Math.max(valorFormatado.lastIndexOf(','), valorFormatado.lastIndexOf('.'));
-        const antesDoUltimo = valorFormatado.substring(0, ultimoSeparador).replace(/[,.-]/g, '');
-        const depoisDoUltimo = valorFormatado.substring(ultimoSeparador + 1);
-        valorFormatado = antesDoUltimo + ',' + depoisDoUltimo;
+      const partes = valorFormatado.split('.');
+      if (partes.length > 2) { // Remove pontos extras
+          valorFormatado = partes.slice(0, -1).join('') + '.' + partes[partes.length - 1];
       }
       
-      // Limitar a dois dígitos após o separador decimal
-      if (temVirgula || temPonto) {
-        const partes = temVirgula ? valorFormatado.split(',') : valorFormatado.split('.');
-        if (partes[1] && partes[1].length > 2) {
-          partes[1] = partes[1].substring(0, 2);
-          valorFormatado = partes.join(temVirgula ? ',' : '.');
+      // Converte vírgula para ponto se houver
+      valorFormatado = valorFormatado.replace(',', '.');
+
+      if (valorFormatado.includes('.')) {
+        const decimalParts = valorFormatado.split('.');
+        if (decimalParts[1] && decimalParts[1].length > 2) {
+          decimalParts[1] = decimalParts[1].substring(0, 2);
+          valorFormatado = decimalParts.join('.');
         }
       }
-      
+
       setVariacoes(prev => prev.map((v, i) => i === index ? { ...v, [campo]: valorFormatado } : v));
+    } else if (campo === "estoque") {
+      setVariacoes(prev => prev.map((v, i) => i === index ? { ...v, [campo]: parseInt(valor) || 0 } : v));
+    }
+    else if (campo === "digital" || campo === "ativo") {
+      setVariacoes(prev => prev.map((v, i) => i === index ? { ...v, [campo]: Boolean(valor) } : v));
     } else {
       setVariacoes(prev => prev.map((v, i) => i === index ? { ...v, [campo]: valor } : v));
     }
@@ -543,97 +496,8 @@ const Produtos = () => {
   // Calcular totalPages com base na nova constante
   const totalPages = Math.ceil(total / PRODUTOS_POR_PAGINA);
 
-  const carregarProduto = async (id) => {
-    try {
-      const response = await produtosService.obter(id);
-      const produto = response.data;
-      
-      // Preparar imagens existentes
-      const imagensExistentes = Array.isArray(produto.ArquivoProdutos) 
-        ? produto.ArquivoProdutos
-          .filter(arquivo => arquivo && arquivo.tipo === 'imagem')
-          .map(arquivo => ({
-            id: arquivo.id,
-            url: arquivo.url,
-            nome: arquivo.nome,
-            principal: arquivo.principal,
-            ordem: arquivo.ordem || 0
-          }))
-        : [];
-
-      // Ordenar imagens pela propriedade ordem
-      imagensExistentes.sort((a, b) => a.ordem - b.ordem);
-
-      // Preparar arquivos existentes
-      const arquivosExistentes = Array.isArray(produto.ArquivoProdutos)
-        ? produto.ArquivoProdutos
-          .filter(arquivo => arquivo && arquivo.tipo === 'arquivo')
-          .map(arquivo => ({
-            id: arquivo.id,
-            url: arquivo.url,
-            nome: arquivo.nome,
-            tamanho: arquivo.tamanho,
-            mimeType: arquivo.mimeType
-          }))
-        : [];
-
-      // Preparar vídeos existentes
-      const videosExistentes = Array.isArray(produto.ArquivoProdutos)
-        ? produto.ArquivoProdutos
-          .filter(arquivo => arquivo && arquivo.tipo === 'video')
-          .map(arquivo => ({
-            id: arquivo.id,
-            url: arquivo.url,
-            nome: arquivo.nome,
-            tamanho: arquivo.tamanho,
-            mimeType: arquivo.mimeType
-          }))
-        : [];
-
-      setFormData({
-        nome: produto.nome || "",
-        descricao: produto.descricao || "",
-        categoriaId: produto.categoriaId || "",
-        ativo: produto.ativo !== undefined ? produto.ativo : true,
-        imagensExistentes,
-        arquivosExistentes,
-        videosExistentes,
-        imagensParaEnviar: [],
-        arquivosParaEnviar: [],
-        videosParaEnviar: []
-      });
-
-      // Carregar variações com valores seguros
-      const variacoesData = Array.isArray(produto.variacoes) ? produto.variacoes : [];
-      setVariacoes(variacoesData.map(v => ({
-        id: v.id, // Manter o ID da variação para possível edição
-        nome: v.nome || "",
-        preco: v.preco !== undefined && v.preco !== null ? String(v.preco) : "0",
-        digital: Boolean(v.digital),
-        estoque: v.estoque !== undefined ? String(v.estoque) : "0",
-        ativo: v.ativo !== undefined ? Boolean(v.ativo) : true
-      })));
-    } catch (err) {
-      console.error("Erro ao carregar produto:", err);
-      error("Erro ao carregar produto");
-      setVariacoes([]);
-      setFormData(prev => ({
-        ...prev,
-        imagensExistentes: [],
-        arquivosExistentes: [],
-        videosExistentes: [],
-        imagensParaEnviar: [],
-        arquivosParaEnviar: [],
-        videosParaEnviar: []
-      }));
-    }
-  };
-
-  useEffect(() => {
-    if (produtoEditando) {
-      carregarProduto(produtoEditando.id);
-    }
-  }, [produtoEditando]);
+  // carregarProduto agora é chamado uma vez no `abrirModal`
+  // e no `useEffect` quando `produtoEditando` muda.
 
   // Componente de preview de imagem com funcionalidade de arrastar e soltar
   const ImagePreview = ({ imagem, onRemove, onSetPrincipal, index, isDraggable = false }) => (
@@ -645,7 +509,7 @@ const Produtos = () => {
           {...provided.draggableProps}
         >
           <img 
-            src={imagem.url} 
+            src={imagem.url} // URL já completa
             alt={imagem.nome} 
             className="w-24 h-24 object-cover rounded-lg"
           />
@@ -665,7 +529,7 @@ const Produtos = () => {
             </button>
             <button
               type="button"
-              onClick={() => onRemove(imagem)}
+              onClick={() => onRemove(imagem)} // Chama onRemove com o objeto da imagem
               className="p-1 bg-white/80 rounded-full hover:bg-white"
               title="Remover imagem"
             >
@@ -696,7 +560,7 @@ const Produtos = () => {
       </div>
       <button
         type="button"
-        onClick={() => onRemove(video)}
+        onClick={() => onRemove(video)} // Chama onRemove com o objeto do vídeo
         className="p-1 hover:bg-gray-200 rounded-full"
         title="Remover vídeo"
       >
@@ -723,7 +587,7 @@ const Produtos = () => {
       </div>
       <button
         type="button"
-        onClick={() => onRemove(arquivo)}
+        onClick={() => onRemove(arquivo)} // Chama onRemove com o objeto do arquivo
         className="p-1 hover:bg-gray-200 rounded-full"
         title="Remover arquivo"
       >
@@ -732,38 +596,48 @@ const Produtos = () => {
     </div>
   );
 
+
   const handleDragEnd = async (result) => {
-    // Se não houve destino ou a origem e o destino são iguais, não faz nada
     if (!result.destination || result.source.index === result.destination.index) {
       return;
     }
 
-    // Reordena as imagens localmente
-    const novaOrdem = Array.from(formData.imagensExistentes);
+    const novaOrdem = Array.from(formData.ArquivoProdutos.filter(f => f.tipo === 'imagem')); // Pega apenas imagens para reordenar
     const [imagemMovida] = novaOrdem.splice(result.source.index, 1);
     novaOrdem.splice(result.destination.index, 0, imagemMovida);
 
-    // Atualiza o estado
+    // Atualiza o estado de ArquivoProdutos mesclando a nova ordem das imagens com os outros tipos de arquivos
     setFormData(prev => ({
       ...prev,
-      imagensExistentes: novaOrdem
+      ArquivoProdutos: [
+        ...novaOrdem, // Imagens reordenadas
+        ...prev.ArquivoProdutos.filter(f => f.tipo !== 'imagem') // Outros tipos de arquivos mantêm sua posição
+      ].sort((a, b) => { // Opcional: Reordenar todos por ordem e principal para manter o principal no topo
+          if (a.principal && !b.principal) return -1;
+          if (!a.principal && b.principal) return 1;
+          return a.ordem - b.ordem;
+      })
     }));
 
-    // Se estiver editando um produto, envia a nova ordem para o servidor
+    // Envia a nova ordem para o servidor APENAS se estiver editando um produto
     if (produtoEditando) {
       try {
-        // Extrai os IDs na nova ordem
         const idsOrdenados = novaOrdem.map(imagem => imagem.id);
         await produtosService.atualizarOrdemImagens(produtoEditando.id, idsOrdenados);
         success("Ordem das imagens atualizada com sucesso!");
       } catch (err) {
         console.error("Erro ao atualizar ordem das imagens:", err);
         error("Erro ao atualizar ordem das imagens.");
-        // Reverte a ordem em caso de erro
-        await carregarProduto(produtoEditando.id);
+        // Reverte a ordem em caso de erro, recarregando o produto
+        carregarProduto(produtoEditando.id);
       }
     }
   };
+
+  const imagensExistentes = formData.ArquivoProdutos.filter(f => f.tipo === 'imagem').sort((a,b) => a.ordem - b.ordem);
+  const arquivosExistentes = formData.ArquivoProdutos.filter(f => f.tipo === 'arquivo');
+  const videosExistentes = formData.ArquivoProdutos.filter(f => f.tipo === 'video');
+
 
   return (
     <div className="p-4 sm:p-6">
@@ -995,7 +869,7 @@ const Produtos = () => {
                 </div>
 
                 {/* Preview de imagens existentes */}
-                {formData.imagensExistentes && formData.imagensExistentes.length > 0 && (
+                {imagensExistentes && imagensExistentes.length > 0 && (
                   <div className="mt-6 p-4 bg-white rounded-lg shadow">
                     <h3 className="text-lg font-semibold mb-4 text-gray-900">Imagens Existentes</h3>
                     <DragDropContext onDragEnd={handleDragEnd}>
@@ -1006,28 +880,14 @@ const Produtos = () => {
                             ref={provided.innerRef}
                             {...provided.droppableProps}
                           >
-                            {formData.imagensExistentes.map((imagem, index) => (
+                            {imagensExistentes.map((imagem, index) => ( // Usa imagensExistentes filtrado
                               <ImagePreview
                                 key={imagem.id}
                                 imagem={imagem}
                                 index={index}
                                 isDraggable={true}
-                                onRemove={(img) => {
-                                  setFormData(prev => ({
-                                    ...prev,
-                                    imagensExistentes: prev.imagensExistentes.filter(i => i.id !== img.id),
-                                    imagensParaRemover: [...(prev.imagensParaRemover || []), img.id]
-                                  }));
-                                }}
-                                onSetPrincipal={(img) => {
-                                  setFormData(prev => ({
-                                    ...prev,
-                                    imagensExistentes: prev.imagensExistentes.map(i => ({
-                                      ...i,
-                                      principal: i.id === img.id
-                                    }))
-                                  }));
-                                }}
+                                onRemove={removerArquivoExistente} // <-- CHAMA A FUNÇÃO DE REMOÇÃO VIA API
+                                onSetPrincipal={definirPrincipal} // <-- CHAMA A FUNÇÃO DE DEFINIR PRINCIPAL VIA API
                               />
                             ))}
                             {provided.placeholder}
@@ -1040,7 +900,7 @@ const Produtos = () => {
 
                 {/* Upload de imagens */}
                 <div className="mt-6 p-4 bg-white rounded-lg shadow">
-                  <h3 className="text-lg font-semibold mb-2 text-gray-900">Upload de Imagens</h3>
+                  <h3 className="text-lg font-semibold mb-2 text-gray-900">Upload de Novas Imagens</h3>
                   <FileDropZone
                     onDrop={onImageDrop}
                     accept={{
@@ -1049,7 +909,7 @@ const Produtos = () => {
                     maxFiles={10}
                     tipo="imagem"
                   />
-                  {formData.imagensParaEnviar && formData.imagensParaEnviar.length > 0 && (
+                  {Array.isArray(formData.imagensParaEnviar) && formData.imagensParaEnviar.length > 0 && (
                     <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                       {formData.imagensParaEnviar.map((file, index) => (
                         <div key={index} className="relative group">
@@ -1077,7 +937,7 @@ const Produtos = () => {
                 {/* Upload de arquivos */}
                 {Array.isArray(variacoes) && variacoes.some(v => v.digital) && (
                   <div className="mt-6 p-4 bg-white rounded-lg shadow">
-                    <h3 className="text-lg font-semibold mb-2 text-gray-900">Upload de Arquivo Digital</h3>
+                    <h3 className="text-lg font-semibold mb-2 text-gray-900">Upload de Novo Arquivo Digital</h3>
                     <FileDropZone
                       onDrop={onFileDrop}
                       accept={{
@@ -1087,7 +947,7 @@ const Produtos = () => {
                       maxFiles={1}
                       tipo="arquivo"
                     />
-                    {formData.arquivosParaEnviar && formData.arquivosParaEnviar.length > 0 && (
+                    {Array.isArray(formData.arquivosParaEnviar) && formData.arquivosParaEnviar.length > 0 && (
                       <div className="mt-4 space-y-2">
                         {formData.arquivosParaEnviar.map((file, index) => (
                           <div key={index} className="flex items-center justify-between p-3 border rounded-lg bg-gray-50">
@@ -1111,7 +971,7 @@ const Produtos = () => {
 
                 {/* Upload de vídeos */}
                 <div className="mt-6 p-4 bg-white rounded-lg shadow">
-                  <h3 className="text-lg font-semibold mb-2 text-gray-900">Upload de Vídeo</h3>
+                  <h3 className="text-lg font-semibold mb-2 text-gray-900">Upload de Novo Vídeo</h3>
                   <FileDropZone
                     onDrop={onVideoDrop}
                     accept={{
@@ -1120,7 +980,7 @@ const Produtos = () => {
                     maxFiles={1}
                     tipo="video"
                   />
-                  {formData.videosParaEnviar && formData.videosParaEnviar.length > 0 && (
+                  {Array.isArray(formData.videosParaEnviar) && formData.videosParaEnviar.length > 0 && (
                     <div className="mt-4 space-y-2">
                       {formData.videosParaEnviar.map((file, index) => (
                         <div key={index} className="flex items-center justify-between p-3 border rounded-lg bg-gray-50">
@@ -1130,12 +990,7 @@ const Produtos = () => {
                           </div>
                           <button
                             type="button"
-                            onClick={() => {
-                              setFormData(prev => ({
-                                ...prev,
-                                videosParaEnviar: []
-                              }));
-                            }}
+                            onClick={() => removerVideoParaEnviar(index)} // <-- CHAMA A REMOÇÃO DE "PARA ENVIAR"
                             className="p-1 hover:bg-gray-200 rounded-full"
                           >
                             <TrashIcon className="h-4 w-4 text-red-500" />
@@ -1147,21 +1002,15 @@ const Produtos = () => {
                 </div>
 
                 {/* Preview de vídeos existentes */}
-                {formData.videosExistentes && formData.videosExistentes.length > 0 && (
+                {videosExistentes && videosExistentes.length > 0 && ( // Usa videosExistentes filtrado
                   <div className="mt-6 p-4 bg-white rounded-lg shadow">
                     <h3 className="text-lg font-semibold mb-4 text-gray-900">Vídeos Existentes</h3>
                     <div className="space-y-3">
-                      {formData.videosExistentes.map((video) => (
+                      {videosExistentes.map((video) => (
                         <VideoPreview
                           key={video.id}
                           video={video}
-                          onRemove={(vid) => {
-                            setFormData(prev => ({
-                              ...prev,
-                              videosExistentes: prev.videosExistentes.filter(v => v.id !== vid.id),
-                              videosParaRemover: [...(prev.videosParaRemover || []), vid.id]
-                            }));
-                          }}
+                          onRemove={removerArquivoExistente} // <-- CHAMA A FUNÇÃO DE REMOÇÃO VIA API
                         />
                       ))}
                     </div>
@@ -1169,21 +1018,15 @@ const Produtos = () => {
                 )}
                 
                 {/* Preview de arquivos existentes */}
-                {formData.arquivosExistentes && formData.arquivosExistentes.length > 0 && (
+                {arquivosExistentes && arquivosExistentes.length > 0 && ( // Usa arquivosExistentes filtrado
                   <div className="mt-6 p-4 bg-white rounded-lg shadow">
                     <h3 className="text-lg font-semibold mb-4 text-gray-900">Arquivos Digitais Existentes</h3>
                     <div className="space-y-3">
-                      {formData.arquivosExistentes.map((arquivo) => (
+                      {arquivosExistentes.map((arquivo) => (
                         <FilePreview
                           key={arquivo.id}
                           arquivo={arquivo}
-                          onRemove={(arq) => {
-                            setFormData(prev => ({
-                              ...prev,
-                              arquivosExistentes: prev.arquivosExistentes.filter(a => a.id !== arq.id),
-                              arquivosParaRemover: [...(prev.arquivosParaRemover || []), arq.id]
-                            }));
-                          }}
+                          onRemove={removerArquivoExistente} // <-- CHAMA A FUNÇÃO DE REMOÇÃO VIA API
                         />
                       ))}
                     </div>
@@ -1228,7 +1071,7 @@ const Produtos = () => {
                             value={variacao.preco}
                             onChange={(e) => handleVariacaoChange(index, "preco", e.target.value)}
                             className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                            placeholder="R$ 0,00"
+                            placeholder="0.00" // Removido R$, a formatação é só na exibição
                           />
                         </div>
 
@@ -1238,7 +1081,7 @@ const Produtos = () => {
                           <input
                             type="number"
                             value={variacao.estoque}
-                            onChange={(e) => handleVariacaoChange(index, "estoque", parseInt(e.target.value) || 0)}
+                            onChange={(e) => handleVariacaoChange(index, "estoque", e.target.value)} // Campo type="number" já ajuda
                             className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                             placeholder="0"
                             min="0"
@@ -1371,4 +1214,4 @@ const Produtos = () => {
   )
 }
 
-export default Produtos
+export default Produtos;
