@@ -1,12 +1,13 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { produtosService, categoriasService, variacoesService } from "../services/api"
+// CORREÇÃO: Importar uploadService e garantir que os outros serviços estão corretos.
+import { produtosService, categoriasService, variacoesService, uploadService } from "../services/api"
 import { useToast } from "../contexts/ToastContext"
 import LoadingSpinner from "../components/LoadingSpinner"
 import * as Dialog from "@radix-ui/react-dialog"
 import * as AlertDialog from "@radix-ui/react-alert-dialog"
-import { MagnifyingGlassIcon, PlusIcon, Pencil1Icon, TrashIcon, Cross2Icon, StarIcon, StarFilledIcon, DragHandleDots2Icon } from "@radix-ui/react-icons"
+import { MagnifyingGlassIcon, PlusIcon, Pencil1Icon, TrashIcon, Cross2Icon, StarFilledIcon, DragHandleDots2Icon } from "@radix-ui/react-icons"
 import FileDropZone from "../components/FileDropZone"
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd"
 
@@ -52,10 +53,9 @@ const Produtos = () => {
   const carregarDadosIniciais = async () => {
     setLoading(true);
     try {
-      // Carrega categorias e a primeira página de produtos simultaneamente
       const [categoriasRes] = await Promise.all([
         categoriasService.listar(),
-        carregarProdutos(1) // Carrega a primeira página
+        carregarProdutos(1)
       ]);
       setCategorias(categoriasRes.data);
     } catch (err) {
@@ -71,9 +71,9 @@ const Produtos = () => {
     try {
       const response = await produtosService.listar({
         pagina: paginaAtual,
-        limit: PRODUTOS_POR_PAGINA, // CORREÇÃO: Usar 'limit'
+        limit: PRODUTOS_POR_PAGINA,
         busca: busca || undefined,
-        categorias: categoria || undefined, // API espera 'categorias' no plural
+        categorias: categoria || undefined,
       })
       const produtosList = response.data.produtos || response.data;
       const totalProdutos = response.data.total || produtosList.length;
@@ -88,22 +88,20 @@ const Produtos = () => {
   }
   
   const handleBusca = (e) => {
-    setBusca(e.target.value)
-    setPagina(1)
+    setBusca(e.target.value);
+    setPagina(1);
   }
 
   const handleCategoriaChange = (e) => {
-    setCategoria(e.target.value)
-    setPagina(1)
+    setCategoria(e.target.value);
+    setPagina(1);
   }
 
   const abrirModal = async (produto = null) => {
     if (produto) {
       setProdutoEditando(produto);
-      // Carrega os dados completos do produto para edição
       await carregarProdutoParaEdicao(produto.id);
     } else {
-      // Reseta o formulário para um novo produto
       setProdutoEditando(null);
       setFormData({
         nome: "",
@@ -138,7 +136,7 @@ const Produtos = () => {
         nome: produtoCompleto.nome || "",
         descricao: produtoCompleto.descricao || "",
         categoriaId: produtoCompleto.categoriaId || "",
-        ativo: produtoCompleto.ativo !== undefined ? produtoCompleto.ativo : true,
+        ativo: produtoCompleto.ativo !== false,
         imagensExistentes: imagens,
         arquivosExistentes: todosArquivos.filter(a => a.tipo === 'arquivo'),
         videosExistentes: todosArquivos.filter(a => a.tipo === 'video'),
@@ -158,7 +156,7 @@ const Produtos = () => {
       })));
 
     } catch (err) {
-      error("Erro ao carregar detalhes do produto para edição.");
+      error("Erro ao carregar detalhes do produto.");
       fecharModal();
     } finally {
       setLoading(false);
@@ -166,8 +164,8 @@ const Produtos = () => {
   }
 
   const fecharModal = () => {
-    setModalAberto(false)
-    setProdutoEditando(null)
+    setModalAberto(false);
+    setProdutoEditando(null);
   }
 
   const formatarPrecoParaExibicao = (valor) => {
@@ -190,59 +188,49 @@ const Produtos = () => {
 
     try {
       let produtoId;
-      let message;
-
       if (produtoEditando) {
         await produtosService.atualizar(produtoEditando.id, dadosProduto);
         produtoId = produtoEditando.id;
-        message = "Produto atualizado com sucesso!";
       } else {
         const resposta = await produtosService.criar(dadosProduto);
         produtoId = resposta.data.id;
-        message = "Produto criado com sucesso!";
       }
       
-      // Lógica de Variações: apaga as antigas e cria as novas em lote
-      if (produtoEditando && produtoEditando.variacoes && produtoEditando.variacoes.length > 0) {
+      if (produtoEditando?.variacoes?.length > 0) {
+        // CORREÇÃO: Usar a API de variações correta para exclusão
         await Promise.all(
           produtoEditando.variacoes.map(v => variacoesService.excluir(v.id))
         );
       }
-      if (variacoes && variacoes.length > 0) {
+      if (variacoes.length > 0) {
         const variacoesParaEnviar = variacoes.map(v => ({
           ...v,
           preco: parseFloat(String(v.preco).replace(',', '.')) || 0,
-          estoque: parseInt(v.estoque) || 0,
+          estoque: parseInt(v.estoque, 10) || 0,
         }));
         await variacoesService.criarEmLote(produtoId, variacoesParaEnviar);
       }
       
-      // Upload de novas imagens
       if (formData.imagensParaEnviar.length > 0) {
         const formDataImagens = new FormData();
-        formData.imagensParaEnviar.forEach(file => formDataImagens.append('imagens', file)); // API espera 'imagens'
+        formData.imagensParaEnviar.forEach(file => formDataImagens.append('imagens', file));
+        // CORREÇÃO: Usar o uploadService que chama a rota /uploads/...
         await uploadService.uploadProdutoImagens(produtoId, formDataImagens);
       }
 
-      // Upload de novos arquivos digitais (um por vez)
-      if (formData.arquivosParaEnviar.length > 0) {
-        for (const file of formData.arquivosParaEnviar) {
-          const formDataArquivo = new FormData();
-          formDataArquivo.append('arquivo', file);
-          await uploadService.uploadProdutoArquivo(produtoId, formDataArquivo);
-        }
+      for (const file of formData.arquivosParaEnviar) {
+        const formDataArquivo = new FormData();
+        formDataArquivo.append('arquivo', file);
+        await uploadService.uploadProdutoArquivo(produtoId, formDataArquivo);
       }
 
-      // Upload de novos vídeos (um por vez)
-      if (formData.videosParaEnviar.length > 0) {
-        for (const file of formData.videosParaEnviar) {
-          const formDataVideo = new FormData();
-          formDataVideo.append('video', file);
-          await uploadService.uploadProdutoVideo(produtoId, formDataVideo);
-        }
+      for (const file of formData.videosParaEnviar) {
+        const formDataVideo = new FormData();
+        formDataVideo.append('video', file);
+        await uploadService.uploadProdutoVideo(produtoId, formDataVideo);
       }
 
-      success(message);
+      success(produtoEditando ? "Produto atualizado com sucesso!" : "Produto criado com sucesso!");
       fecharModal();
       await carregarProdutos();
     } catch (err) {
@@ -253,59 +241,41 @@ const Produtos = () => {
     }
   }
 
-  const handleExcluir = (produto) => {
-    setProdutoExcluindo(produto)
-  }
+  const handleExcluir = (produto) => setProdutoExcluindo(produto);
 
-const confirmarExclusao = async () => {
-  if (!produtoExcluindo) return;
-  try {
-    // 1. Aguarda a API finalizar a exclusão
-    await produtosService.excluir(produtoExcluindo.id);
-    
-    // 2. Se a exclusão deu certo, mostra a mensagem de sucesso
-    success("Produto excluído com sucesso!");
-    
-    setProdutoExcluindo(null); // Fecha o modal de confirmação
-    
-    // 3. AGORA, com o produto garantidamente excluído, recarrega a lista
-    // A paginação pode ser um problema aqui. Se você está na última página e exclui o único item,
-    // você deve voltar para a página anterior.
-    if (produtos.length === 1 && pagina > 1) {
-      setPagina(pagina - 1); // Volta uma página se era o último item
-    } else {
-      await carregarProdutos(); // Recarrega a página atual
+  const confirmarExclusao = async () => {
+    if (!produtoExcluindo) return;
+    try {
+      await produtosService.excluir(produtoExcluindo.id);
+      success("Produto excluído com sucesso!");
+      setProdutoExcluindo(null);
+      await carregarProdutos();
+    } catch (err) {
+      error(err.response?.data?.erro || "Erro ao excluir produto.");
+      setProdutoExcluindo(null);
     }
-
-  } catch (err) {
-    // Mostra um erro detalhado se a exclusão falhar
-    console.error("Falha ao excluir produto:", err);
-    error(err.response?.data?.erro || "Erro ao excluir o produto. Ele pode estar associado a um pedido.");
-    setProdutoExcluindo(null);
   }
-};
 
   const handleChange = (e) => {
-    const { name, value, type, checked } = e.target
-    setFormData(prev => ({ ...prev, [name]: type === "checkbox" ? checked : value }))
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({ ...prev, [name]: type === "checkbox" ? checked : value }));
   }
 
-  const onImageDrop = (acceptedFiles) => setFormData(prev => ({ ...prev, imagensParaEnviar: [...prev.imagensParaEnviar, ...acceptedFiles] }));
-  const onFileDrop = (acceptedFiles) => setFormData(prev => ({ ...prev, arquivosParaEnviar: [...prev.arquivosParaEnviar, ...acceptedFiles] }));
-  const onVideoDrop = (acceptedFiles) => setFormData(prev => ({ ...prev, videosParaEnviar: [...prev.videosParaEnviar, ...acceptedFiles] }));
+  const onImageDrop = (files) => setFormData(prev => ({ ...prev, imagensParaEnviar: [...prev.imagensParaEnviar, ...files] }));
+  const onFileDrop = (files) => setFormData(prev => ({ ...prev, arquivosParaEnviar: [...prev.arquivosParaEnviar, ...files] }));
+  const onVideoDrop = (files) => setFormData(prev => ({ ...prev, videosParaEnviar: [...prev.videosParaEnviar, ...files] }));
 
-  const removerImagemParaEnviar = (index) => setFormData(prev => ({ ...prev, imagensParaEnviar: prev.imagensParaEnviar.filter((_, i) => i !== index) }));
-  const removerArquivoParaEnviar = (index) => setFormData(prev => ({ ...prev, arquivosParaEnviar: prev.arquivosParaEnviar.filter((_, i) => i !== index) }));
-  const removerVideoParaEnviar = (index) => setFormData(prev => ({ ...prev, videosParaEnviar: prev.videosParaEnviar.filter((_, i) => i !== index) }));
+  const removerImagemParaEnviar = (i) => setFormData(prev => ({ ...prev, imagensParaEnviar: prev.imagensParaEnviar.filter((_, idx) => idx !== i) }));
+  const removerArquivoParaEnviar = (i) => setFormData(prev => ({ ...prev, arquivosParaEnviar: prev.arquivosParaEnviar.filter((_, idx) => idx !== i) }));
+  const removerVideoParaEnviar = (i) => setFormData(prev => ({ ...prev, videosParaEnviar: prev.videosParaEnviar.filter((_, idx) => idx !== i) }));
 
   const removerArquivoExistente = async (arquivoId) => {
     if (!produtoEditando) return;
     try {
       await uploadService.excluirArquivo(arquivoId);
-      await carregarProdutoParaEdicao(produtoEditando.id); // Recarrega para refletir a mudança
+      await carregarProdutoParaEdicao(produtoEditando.id);
       success("Arquivo removido com sucesso!");
     } catch (err) {
-      console.error("Erro ao remover arquivo:", err);
       error("Erro ao remover arquivo.");
     }
   }
@@ -315,9 +285,8 @@ const confirmarExclusao = async () => {
     try {
       await uploadService.definirImagemPrincipal(produtoEditando.id, arquivoId);
       await carregarProdutoParaEdicao(produtoEditando.id);
-      success("Imagem principal definida com sucesso!");
+      success("Imagem principal definida!");
     } catch (err) {
-      console.error("Erro ao definir imagem principal:", err);
       error("Erro ao definir imagem principal.");
     }
   }
@@ -337,17 +306,13 @@ const confirmarExclusao = async () => {
       success("Ordem das imagens atualizada!");
     } catch (err) {
       error("Falha ao salvar a nova ordem das imagens.");
-      // Reverter visualmente em caso de erro
       await carregarProdutoParaEdicao(produtoEditando.id);
     }
   };
 
   const adicionarVariacao = () => setVariacoes(prev => [...(Array.isArray(prev) ? prev : []), { nome: "", preco: "0.00", estoque: "0", digital: false, ativo: true }]);
   const removerVariacao = (index) => setVariacoes(prev => prev.filter((_, i) => i !== index));
-
-  const handleVariacaoChange = (index, campo, valor) => {
-    setVariacoes(prev => prev.map((v, i) => (i === index ? { ...v, [campo]: valor } : v)));
-  }
+  const handleVariacaoChange = (index, campo, valor) => setVariacoes(prev => prev.map((v, i) => (i === index ? { ...v, [campo]: valor } : v)));
   
   const totalPages = Math.ceil(total / PRODUTOS_POR_PAGINA);
   
@@ -355,45 +320,23 @@ const confirmarExclusao = async () => {
     <div className="p-4 sm:p-6">
       <h1 className="text-2xl font-bold mb-4">Gerenciamento de Produtos</h1>
 
-      {/* Barra de Ações */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
         <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 w-full">
           <div className="relative w-full sm:w-auto">
             <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Buscar por nome..."
-              value={busca}
-              onChange={handleBusca}
-              className="pl-10 pr-4 py-2 border rounded-md w-full"
-            />
+            <input type="text" placeholder="Buscar por nome..." value={busca} onChange={handleBusca} className="pl-10 pr-4 py-2 border rounded-md w-full"/>
           </div>
-          <select
-            value={categoria}
-            onChange={handleCategoriaChange}
-            className="px-4 py-2 border rounded-md w-full sm:w-auto"
-          >
+          <select value={categoria} onChange={handleCategoriaChange} className="px-4 py-2 border rounded-md w-full sm:w-auto">
             <option value="">Todas as categorias</option>
-            {categorias.map((cat) => (
-              <option key={cat.id} value={cat.id}>
-                {cat.nome}
-              </option>
-            ))}
+            {categorias.map((cat) => (<option key={cat.id} value={cat.id}>{cat.nome}</option>))}
           </select>
         </div>
-        <button
-          onClick={() => abrirModal()}
-          style={{ width: '190px' }}
-          className="bg-blue-500 text-white px-4 py-2 rounded-md flex items-center  justify-center"
-        >
+        <button onClick={() => abrirModal()} className="bg-blue-500 text-white px-4 py-2 rounded-md flex items-center justify-center shrink-0">
           <PlusIcon className="mr-2" /> Novo Produto
         </button>
       </div>
 
-       {/* Tabela de Produtos */}
-      {loading ? (
-        <LoadingSpinner />
-      ) : (
+      {loading ? (<LoadingSpinner />) : (
         <>
           <div className="overflow-x-auto hidden md:block">
             <table className="min-w-full bg-white border">
@@ -409,11 +352,7 @@ const confirmarExclusao = async () => {
                 {produtos.map((produto) => (
                   <tr key={produto.id} className="border-b hover:bg-gray-50">
                     <td className="p-3 flex items-center gap-4">
-                      <img
-                        src={produto.imagens?.[0] || "https://via.placeholder.com/150"}
-                        alt={produto.nome}
-                        className="w-12 h-12 rounded-md object-cover"
-                      />
+                      <img src={produto.imagens?.[0] || "https://via.placeholder.com/150"} alt={produto.nome} className="w-12 h-12 rounded-md object-cover"/>
                       <span className="font-medium">{produto.nome}</span>
                     </td>
                     <td className="p-3">
@@ -427,31 +366,19 @@ const confirmarExclusao = async () => {
                               {v.digital && <span className="text-blue-500">[Digital]</span>}
                             </div>
                           ))
-                        ) : (
-                          <span className="text-gray-500 text-sm">Sem variações</span>
-                        )}
+                        ) : (<span className="text-gray-500 text-sm">Sem variações</span>)}
                       </div>
                     </td>
-                    <td className="p-3 text-center">
-                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${produto.ativo ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
-                        {produto.ativo ? "Ativo" : "Inativo"}
-                      </span>
-                    </td>
+                    <td className="p-3 text-center"><span className={`px-2 py-1 rounded-full text-xs font-semibold ${produto.ativo ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>{produto.ativo ? "Ativo" : "Inativo"}</span></td>
                     <td className="p-3 text-right">
-                      <button onClick={() => abrirModal(produto)} className="p-2 text-gray-500 hover:text-blue-600">
-                        <Pencil1Icon />
-                      </button>
-                      <button onClick={() => handleExcluir(produto)} className="p-2 text-gray-500 hover:text-red-600">
-                        <TrashIcon />
-                      </button>
+                      <button onClick={() => abrirModal(produto)} className="p-2 text-gray-500 hover:text-blue-600"><Pencil1Icon /></button>
+                      <button onClick={() => handleExcluir(produto)} className="p-2 text-gray-500 hover:text-red-600"><TrashIcon /></button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          
-           {/* Cards para Mobile */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:hidden">
             {produtos.map((produto) => (
               <div key={produto.id} className="bg-white p-4 rounded-lg shadow">
@@ -464,9 +391,7 @@ const confirmarExclusao = async () => {
                  </div>
                 <div className="mt-3 space-y-2 border-t pt-3">
                   {Array.isArray(produto.variacoes) && produto.variacoes.length > 0 ? produto.variacoes.map((v, i) => (
-                    <div key={i} className="text-sm">
-                      <span className="font-medium">{v.nome}: </span>{formatarPrecoParaExibicao(v.preco)} ({v.estoque} un.)
-                    </div>
+                    <div key={i} className="text-sm"><span className="font-medium">{v.nome}: </span>{formatarPrecoParaExibicao(v.preco)} ({v.estoque} un.)</div>
                   )) : <p className="text-gray-500 text-sm">Sem variações</p>}
                 </div>
                 <div className="mt-4 flex justify-end space-x-2">
@@ -479,16 +404,8 @@ const confirmarExclusao = async () => {
         </>
       )}
 
-      {/* Paginação */}
-      {totalPages > 1 && (
-        <div className="flex justify-center items-center mt-6">
-          <button onClick={() => setPagina(p => Math.max(1, p - 1))} disabled={pagina <= 1} className="px-4 py-2 border rounded-l-md bg-white hover:bg-gray-50 disabled:opacity-50">Anterior</button>
-          <span className="px-4 py-2 border-t border-b bg-white">Página {pagina} de {totalPages}</span>
-          <button onClick={() => setPagina(p => Math.min(totalPages, p + 1))} disabled={pagina >= totalPages} className="px-4 py-2 border rounded-r-md bg-white hover:bg-gray-50 disabled:opacity-50">Próxima</button>
-        </div>
-      )}
+      {totalPages > 1 && (<div className="flex justify-center items-center mt-6"><button onClick={() => setPagina(p => Math.max(1, p - 1))} disabled={pagina <= 1} className="px-4 py-2 border rounded-l-md bg-white hover:bg-gray-50 disabled:opacity-50">Anterior</button><span className="px-4 py-2 border-t border-b bg-white">Página {pagina} de {totalPages}</span><button onClick={() => setPagina(p => Math.min(totalPages, p + 1))} disabled={pagina >= totalPages} className="px-4 py-2 border rounded-r-md bg-white hover:bg-gray-50 disabled:opacity-50">Próxima</button></div>)}
 
-      {/* Modal de Edição/Criação */}
       <Dialog.Root open={modalAberto} onOpenChange={setModalAberto}>
         <Dialog.Portal>
           <Dialog.Overlay className="bg-black/50 fixed inset-0 z-50" />
@@ -504,7 +421,6 @@ const confirmarExclusao = async () => {
               <div><label className="block text-sm font-medium">Descrição</label><textarea name="descricao" value={formData.descricao} onChange={handleChange} className="mt-1 w-full p-2 border rounded-md" rows="4"></textarea></div>
               <div className="flex items-center"><input type="checkbox" name="ativo" checked={formData.ativo} onChange={handleChange} className="h-4 w-4 rounded"/><label className="ml-2">Ativo</label></div>
 
-              {/* Seção de Imagens */}
               <div className="space-y-4"><h3 className="text-lg font-semibold">Imagens</h3>
                 {formData.imagensExistentes.length > 0 && (
                   <DragDropContext onDragEnd={handleDragEnd}>
@@ -512,12 +428,12 @@ const confirmarExclusao = async () => {
                       {(provided) => (
                         <div ref={provided.innerRef} {...provided.droppableProps} className="flex flex-wrap gap-4">
                           {formData.imagensExistentes.map((img, index) => (
-                            <Draggable key={img.id} draggableId={String(img.id)} index={index}>
+                            <Draggable key={String(img.id)} draggableId={String(img.id)} index={index}>
                               {(provided) => (
                                 <div ref={provided.innerRef} {...provided.draggableProps} className="relative group">
                                   <img src={img.url} alt="preview" className="w-24 h-24 object-cover rounded-lg"/>
                                   <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
-                                    <button type="button" {...provided.dragHandleProps} className="p-1.5 text-white"><DragHandleDots2Icon /></button>
+                                    <button type="button" {...provided.dragHandleProps} className="p-1.5 text-white cursor-move"><DragHandleDots2Icon /></button>
                                     <button type="button" onClick={() => definirPrincipal(img.id)} className={`p-1.5 rounded-full ${img.principal ? 'text-yellow-400' : 'text-white'}`}><StarFilledIcon /></button>
                                     <button type="button" onClick={() => removerArquivoExistente(img.id)} className="p-1.5 text-white hover:text-red-500"><TrashIcon /></button>
                                   </div>
@@ -542,7 +458,6 @@ const confirmarExclusao = async () => {
                 </div>
               </div>
 
-              {/* Seção de Arquivos e Vídeos */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-4"><h3 className="text-lg font-semibold">Arquivo Digital</h3>
                   {formData.arquivosExistentes.map(arq => <div key={arq.id} className="text-sm"><span>{arq.nome}</span> <button type="button" onClick={() => removerArquivoExistente(arq.id)} className="text-red-500 ml-2">Remover</button></div>)}
@@ -556,12 +471,11 @@ const confirmarExclusao = async () => {
                 </div>
               </div>
 
-              {/* Seção de Variações */}
               <div className="space-y-4"><h3 className="text-lg font-semibold">Variações</h3>
                 {variacoes.map((v, i) => (
                   <div key={i} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center p-2 border rounded-md">
                     <div className="md:col-span-4"><input placeholder="Nome" value={v.nome} onChange={e => handleVariacaoChange(i, 'nome', e.target.value)} className="w-full p-2 border rounded"/></div>
-                    <div className="md:col-span-3"><input placeholder="Preço (ex: 10,50)" value={v.preco} onChange={e => handleVariacaoChange(i, 'preco', e.target.value)} className="w-full p-2 border rounded"/></div>
+                    <div className="md:col-span-3"><input placeholder="Preço (ex: 10.50)" value={v.preco} onChange={e => handleVariacaoChange(i, 'preco', e.target.value)} className="w-full p-2 border rounded"/></div>
                     <div className="md:col-span-2"><input type="number" placeholder="Estoque" value={v.estoque} onChange={e => handleVariacaoChange(i, 'estoque', e.target.value)} className="w-full p-2 border rounded"/></div>
                     <div className="md:col-span-1 flex items-center justify-center"><input type="checkbox" checked={v.digital} onChange={e => handleVariacaoChange(i, 'digital', e.target.checked)} className="h-4 w-4"/><label className="ml-1 text-xs">Digital</label></div>
                     <div className="md:col-span-1 flex items-center justify-center"><input type="checkbox" checked={v.ativo} onChange={e => handleVariacaoChange(i, 'ativo', e.target.checked)} className="h-4 w-4"/><label className="ml-1 text-xs">Ativo</label></div>
@@ -577,7 +491,6 @@ const confirmarExclusao = async () => {
         </Dialog.Portal>
       </Dialog.Root>
 
-      {/* Confirmação de Exclusão */}
       <AlertDialog.Root open={!!produtoExcluindo} onOpenChange={() => setProdutoExcluindo(null)}>
         <AlertDialog.Portal>
             <AlertDialog.Overlay className="bg-black/40 fixed inset-0 z-50" />
