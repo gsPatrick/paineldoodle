@@ -257,18 +257,33 @@ const Produtos = () => {
     setProdutoExcluindo(produto)
   }
 
-  const confirmarExclusao = async () => {
-    if (!produtoExcluindo) return;
-    try {
-      await produtosService.excluir(produtoExcluindo.id)
-      success("Produto excluído com sucesso")
-      setProdutoExcluindo(null)
-      await carregarProdutos()
-    } catch (err) {
-      error(err.response?.data?.erro || "Erro ao excluir produto")
-      setProdutoExcluindo(null)
+const confirmarExclusao = async () => {
+  if (!produtoExcluindo) return;
+  try {
+    // 1. Aguarda a API finalizar a exclusão
+    await produtosService.excluir(produtoExcluindo.id);
+    
+    // 2. Se a exclusão deu certo, mostra a mensagem de sucesso
+    success("Produto excluído com sucesso!");
+    
+    setProdutoExcluindo(null); // Fecha o modal de confirmação
+    
+    // 3. AGORA, com o produto garantidamente excluído, recarrega a lista
+    // A paginação pode ser um problema aqui. Se você está na última página e exclui o único item,
+    // você deve voltar para a página anterior.
+    if (produtos.length === 1 && pagina > 1) {
+      setPagina(pagina - 1); // Volta uma página se era o último item
+    } else {
+      await carregarProdutos(); // Recarrega a página atual
     }
+
+  } catch (err) {
+    // Mostra um erro detalhado se a exclusão falhar
+    console.error("Falha ao excluir produto:", err);
+    error(err.response?.data?.erro || "Erro ao excluir o produto. Ele pode estar associado a um pedido.");
+    setProdutoExcluindo(null);
   }
+};
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target
