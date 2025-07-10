@@ -58,55 +58,29 @@ export const produtosService = {
   criar: (dados) => api.post("/produtos", dados),
   atualizar: (id, dados) => api.put(`/produtos/${id}`, dados),
   excluir: (id) => api.delete(`/produtos/${id}`),
-  relacionados: (id, produtosRelacionados) => api.post(`/produtos/${id}/relacionados`, { produtosRelacionados }),
-  listarArquivos: (produtoId) => api.get(`/produtos/${produtoId}/arquivos/download`),
 };
 
 export const categoriasService = {
   listar: () => api.get("/categorias"),
-  obter: (id) => api.get(`/categorias/${id}`),
   criar: (dados) => api.post("/categorias", dados),
   atualizar: (id, dados) => api.put(`/categorias/${id}`, dados),
   excluir: (id) => api.delete(`/categorias/${id}`),
 };
 
 export const variacoesService = {
-  listar: (produtoId) => api.get(`/produtos/${produtoId}/variacoes`),
-  criar: (produtoId, dados) => api.post(`/produtos/${produtoId}/variacoes`, dados),
   criarEmLote: (produtoId, variacoes) => api.post(`/produtos/${produtoId}/variacoes/lote`, variacoes),
-  atualizar: (variacaoId, dados) => api.put(`/variacoes/${variacaoId}`, dados),
+  // CORREÇÃO CRÍTICA: A rota para excluir uma variação é pelo ID dela, não precisa do ID do produto.
   excluir: (variacaoId) => api.delete(`/variacoes/${variacaoId}`),
 };
 
 // NOVO SERVIÇO PARA UPLOADS (separado do produtosService)
 export const uploadService = {
-  uploadProdutoImagens: (produtoId, formData) => {
-    return api.post(`/uploads/produtos/${produtoId}/imagens`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 300000,
-    });
-  },
-  uploadProdutoArquivo: (produtoId, formData) => {
-    return api.post(`/uploads/produtos/${produtoId}/arquivo`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 300000,
-    });
-  },
-  uploadProdutoVideo: (produtoId, formData) => {
-    return api.post(`/uploads/produtos/${produtoId}/video`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 600000,
-    });
-  },
-  excluirArquivo: (arquivoId) => {
-    return api.delete(`/uploads/arquivos/${arquivoId}`);
-  },
-  definirImagemPrincipal: (produtoId, arquivoId) => {
-    return api.put(`/uploads/produtos/${produtoId}/imagens/${arquivoId}/principal`);
-  },
-  atualizarOrdemImagens: (produtoId, dados) => {
-    return api.put(`/uploads/produtos/${produtoId}/imagens/ordem`, dados);
-  },
+  uploadProdutoImagens: (produtoId, formData) => api.post(`/uploads/produtos/${produtoId}/imagens`, formData, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 300000 }),
+  uploadProdutoArquivo: (produtoId, formData) => api.post(`/uploads/produtos/${produtoId}/arquivo`, formData, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 300000 }),
+  uploadProdutoVideo: (produtoId, formData) => api.post(`/uploads/produtos/${produtoId}/video`, formData, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 600000 }),
+  excluirArquivo: (arquivoId) => api.delete(`/uploads/arquivos/${arquivoId}`),
+  definirImagemPrincipal: (produtoId, arquivoId) => api.put(`/uploads/produtos/${produtoId}/imagens/${arquivoId}/principal`),
+  atualizarOrdemImagens: (produtoId, dados) => api.put(`/uploads/produtos/${produtoId}/imagens/ordem`, dados),
 };
 
 export const pedidosService = {

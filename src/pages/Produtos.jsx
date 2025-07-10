@@ -194,11 +194,16 @@ const Produtos = () => {
         produtoId = resposta.data.id;
       }
       
+      // CORREÇÃO AQUI: Apenas tenta excluir variações que JÁ TINHAM ID.
       if (produtoEditando?.variacoes?.length > 0) {
-        await Promise.all(
-          produtoEditando.variacoes.map(v => variacoesService.excluir(v.id))
-        ).catch(err => console.warn("Falha ao excluir variações antigas.", err));
+        const variacoesParaExcluir = produtoEditando.variacoes.filter(v => v.id);
+        if (variacoesParaExcluir.length > 0) {
+          await Promise.all(
+            variacoesParaExcluir.map(v => variacoesService.excluir(v.id))
+          );
+        }
       }
+
       if (variacoes.length > 0) {
         const variacoesParaEnviar = variacoes.map(v => ({
           ...v,
@@ -208,24 +213,22 @@ const Produtos = () => {
         await variacoesService.criarEmLote(produtoId, variacoesParaEnviar);
       }
       
-      // Upload de novas imagens
       if (formData.imagensParaEnviar.length > 0) {
         const formDataImagens = new FormData();
-        // AQUI ESTÁ A CORREÇÃO: Usar 'imagens' como nome do campo
+        // CORREÇÃO AQUI: Usar 'imagens' como nome do campo
         formData.imagensParaEnviar.forEach(file => formDataImagens.append('imagens', file)); 
         await uploadService.uploadProdutoImagens(produtoId, formDataImagens);
       }
   
-      // Upload de arquivos digitais (espera o campo 'arquivo')
       for (const file of formData.arquivosParaEnviar) {
         const formDataArquivo = new FormData();
         formDataArquivo.append('arquivo', file);
         await uploadService.uploadProdutoArquivo(produtoId, formDataArquivo);
       }
   
-      // Upload de vídeos (espera o campo 'video')
       for (const file of formData.videosParaEnviar) {
         const formDataVideo = new FormData();
+        // O backend espera o campo 'video' para o upload de vídeo
         formDataVideo.append('video', file);
         await uploadService.uploadProdutoVideo(produtoId, formDataVideo);
       }
@@ -235,7 +238,7 @@ const Produtos = () => {
       await carregarProdutos();
     } catch (err) {
       console.error("Erro ao salvar produto:", err.response?.data || err);
-      error(err.response?.data?.erro || "Erro ao salvar produto.");
+      error(err.response?.data?.erro || "Ocorreu um erro ao salvar o produto.");
     } finally {
       setSalvando(false);
     }
@@ -509,5 +512,3 @@ const Produtos = () => {
 }
 
 export default Produtos;
-
-//teste
