@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
-// CORREÇÃO: Importar uploadService e garantir que os outros serviços estão corretos.
-import { produtosService, categoriasService, variacoesService, uploadService } from "../services/api"
+// Importação correta que agora funcionará
+import { produtosService, categoriasService, variacoesService, uploadService } from "../services/api" 
 import { useToast } from "../contexts/ToastContext"
 import LoadingSpinner from "../components/LoadingSpinner"
 import * as Dialog from "@radix-ui/react-dialog"
@@ -81,7 +81,9 @@ const Produtos = () => {
       setTotal(totalProdutos)
     } catch (err) {
       console.error("Erro ao carregar produtos:", err)
-      error("Erro ao carregar produtos.")
+      if (err.response?.status !== 401) {
+        error("Erro ao carregar produtos.");
+      }
     } finally {
       setLoading(false);
     }
@@ -127,10 +129,7 @@ const Produtos = () => {
       const produtoCompleto = resposta.data;
       
       const todosArquivos = produtoCompleto.ArquivoProdutos || [];
-
-      const imagens = todosArquivos
-        .filter(a => a.tipo === 'imagem')
-        .sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+      const imagens = todosArquivos.filter(a => a.tipo === 'imagem').sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
 
       setFormData({
         nome: produtoCompleto.nome || "",
@@ -169,7 +168,7 @@ const Produtos = () => {
   }
 
   const formatarPrecoParaExibicao = (valor) => {
-    if (!valor) return 'R$ 0,00';
+    if (!valor && valor !== 0) return 'R$ 0,00';
     const numero = parseFloat(String(valor).replace(',', '.'));
     if (isNaN(numero)) return 'R$ 0,00';
     return numero.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -178,14 +177,14 @@ const Produtos = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSalvando(true);
-
+  
     const dadosProduto = {
       nome: formData.nome,
       descricao: formData.descricao,
       categoriaId: formData.categoriaId,
       ativo: formData.ativo,
     };
-
+  
     try {
       let produtoId;
       if (produtoEditando) {
@@ -197,10 +196,9 @@ const Produtos = () => {
       }
       
       if (produtoEditando?.variacoes?.length > 0) {
-        // CORREÇÃO: Usar a API de variações correta para exclusão
         await Promise.all(
           produtoEditando.variacoes.map(v => variacoesService.excluir(v.id))
-        );
+        ).catch(err => console.warn("Falha ao excluir variações antigas.", err));
       }
       if (variacoes.length > 0) {
         const variacoesParaEnviar = variacoes.map(v => ({
@@ -214,22 +212,21 @@ const Produtos = () => {
       if (formData.imagensParaEnviar.length > 0) {
         const formDataImagens = new FormData();
         formData.imagensParaEnviar.forEach(file => formDataImagens.append('imagens', file));
-        // CORREÇÃO: Usar o uploadService que chama a rota /uploads/...
         await uploadService.uploadProdutoImagens(produtoId, formDataImagens);
       }
-
+  
       for (const file of formData.arquivosParaEnviar) {
         const formDataArquivo = new FormData();
         formDataArquivo.append('arquivo', file);
         await uploadService.uploadProdutoArquivo(produtoId, formDataArquivo);
       }
-
+  
       for (const file of formData.videosParaEnviar) {
         const formDataVideo = new FormData();
         formDataVideo.append('video', file);
         await uploadService.uploadProdutoVideo(produtoId, formDataVideo);
       }
-
+  
       success(produtoEditando ? "Produto atualizado com sucesso!" : "Produto criado com sucesso!");
       fecharModal();
       await carregarProdutos();
@@ -293,19 +290,16 @@ const Produtos = () => {
 
   const handleDragEnd = async (result) => {
     if (!result.destination || !produtoEditando) return;
-
     const novaOrdem = Array.from(formData.imagensExistentes);
     const [itemMovido] = novaOrdem.splice(result.source.index, 1);
     novaOrdem.splice(result.destination.index, 0, itemMovido);
-
     setFormData(prev => ({ ...prev, imagensExistentes: novaOrdem }));
-
     try {
       const idsOrdenados = novaOrdem.map(img => img.id);
       await uploadService.atualizarOrdemImagens(produtoEditando.id, { ordem: idsOrdenados });
       success("Ordem das imagens atualizada!");
     } catch (err) {
-      error("Falha ao salvar a nova ordem das imagens.");
+      error("Falha ao salvar a nova ordem.");
       await carregarProdutoParaEdicao(produtoEditando.id);
     }
   };
@@ -410,7 +404,11 @@ const Produtos = () => {
         <Dialog.Portal>
           <Dialog.Overlay className="bg-black/50 fixed inset-0 z-50" />
           <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-white p-6 rounded-lg shadow-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <Dialog.Title className="text-xl font-bold mb-4">{produtoEditando ? "Editar Produto" : "Novo Produto"}</Dialog.Title>
+            <Dialog.Title className="text-xl font-bold mb-2">{produtoEditando ? "Editar Produto" : "Novo Produto"}</Dialog.Title>
+            {/* CORREÇÃO DE ACESSIBILIDADE */}
+            <Dialog.Description className="text-sm text-gray-500 mb-4">
+              {produtoEditando ? "Altere os detalhes do produto abaixo." : "Preencha os detalhes para criar um novo produto."}
+            </Dialog.Description>
             <Dialog.Close asChild><button className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><Cross2Icon /></button></Dialog.Close>
             
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -508,4 +506,4 @@ const Produtos = () => {
   )
 }
 
-export default Produtos
+export default Produtos;
