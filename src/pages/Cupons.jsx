@@ -1,10 +1,9 @@
 "use client"
 
 import { useState, useEffect } from "react"
-// Certifique-se que o cuponsService está importando o 'api' global
-import { cuponsService } from "../../services/api" // Verifique o caminho correto, pode ser '@/services/api'
-import { useToast } from "../../contexts/ToastContext" // Verifique o caminho correto
-import LoadingSpinner from "../../components/LoadingSpinner" // Verifique o caminho correto
+import { cuponsService } from "../services/api"
+import { useToast } from "../contexts/ToastContext"
+import LoadingSpinner from "../components/LoadingSpinner"
 import * as Dialog from "@radix-ui/react-dialog"
 import * as AlertDialog from "@radix-ui/react-alert-dialog"
 import { PlusIcon, Pencil1Icon, TrashIcon, Cross2Icon } from "@radix-ui/react-icons"
