@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-// Importação correta que agora funcionará
 import { produtosService, categoriasService, variacoesService, uploadService } from "../services/api" 
 import { useToast } from "../contexts/ToastContext"
 import LoadingSpinner from "../components/LoadingSpinner"
@@ -209,18 +208,22 @@ const Produtos = () => {
         await variacoesService.criarEmLote(produtoId, variacoesParaEnviar);
       }
       
+      // Upload de novas imagens
       if (formData.imagensParaEnviar.length > 0) {
         const formDataImagens = new FormData();
-        formData.imagensParaEnviar.forEach(file => formDataImagens.append('imagens', file));
+        // AQUI ESTÁ A CORREÇÃO: Usar 'imagens' como nome do campo
+        formData.imagensParaEnviar.forEach(file => formDataImagens.append('imagens', file)); 
         await uploadService.uploadProdutoImagens(produtoId, formDataImagens);
       }
   
+      // Upload de arquivos digitais (espera o campo 'arquivo')
       for (const file of formData.arquivosParaEnviar) {
         const formDataArquivo = new FormData();
         formDataArquivo.append('arquivo', file);
         await uploadService.uploadProdutoArquivo(produtoId, formDataArquivo);
       }
   
+      // Upload de vídeos (espera o campo 'video')
       for (const file of formData.videosParaEnviar) {
         const formDataVideo = new FormData();
         formDataVideo.append('video', file);
@@ -405,7 +408,6 @@ const Produtos = () => {
           <Dialog.Overlay className="bg-black/50 fixed inset-0 z-50" />
           <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-white p-6 rounded-lg shadow-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
             <Dialog.Title className="text-xl font-bold mb-2">{produtoEditando ? "Editar Produto" : "Novo Produto"}</Dialog.Title>
-            {/* CORREÇÃO DE ACESSIBILIDADE */}
             <Dialog.Description className="text-sm text-gray-500 mb-4">
               {produtoEditando ? "Altere os detalhes do produto abaixo." : "Preencha os detalhes para criar um novo produto."}
             </Dialog.Description>
