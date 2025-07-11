@@ -152,10 +152,9 @@ export const blogService = {
 };
 
 export const configuracoesService = {
-  // PADRONIZAÇÃO: A rota deve corresponder ao nome do arquivo de rotas do backend (configuracaoLojaRoutes.js)
-  obter: () => api.get("/configuracao-loja"),
-  atualizar: (dados) => api.put("/configuracao-loja", dados),
-  obterEspecifica: (chave) => api.get(`/configuracao-loja/${chave}`),
-  definirEspecifica: (chave, valor) => api.put(`/configuracao-loja/${chave}`, { valor }),
-  inicializar: () => api.post("/configuracao-loja/inicializar"),
-};
+  obter: () => api.get("/configuracoes/loja"),
+  atualizar: (dados) => api.put("/configuracoes/loja", dados),
+  obterEspecifica: (chave) => api.get(`/configuracoes/loja/${chave}`),
+  definirEspecifica: (chave, valor) => api.put(`/configuracoes/loja/${chave}`, { valor }),
+  inicializar: () => api.post("/configuracoes/loja/inicializar"),
+}
